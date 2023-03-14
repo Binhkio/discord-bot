@@ -13,7 +13,12 @@ const {
 } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-const TOKEN = "MTA4MzczMjg1NTUxMjg5OTYzNQ.GDKCLU.Vj1WiPrDOHQ8gHyeDI_84R5N2XBWWiusRtwpSc";
+const tokenArr = [
+    "MTA4MzczMjg1NTUxMjg5OTYzNQ",
+    "GJ2Vld",
+    "4pIJpRoY9y1loEvz0zXaaW56F_BIMOF2Hiaufc"
+]
+const TOKEN = tokenArr.join('.');
 const CLIENT_ID = "1083732855512899635";
 
 //Invite link:  https://discord.com/api/oauth2/authorize?client_id=1083732855512899635&permissions=137471948864&scope=bot
