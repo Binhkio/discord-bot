@@ -75,7 +75,10 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
                     .setName('disconnect')
                     .setDescription('Disconnect from current channel')
                     .toJSON(),
-
+                new SlashCommandBuilder()
+                    .setName('leave')
+                    .setDescription('Disconnect from current channel')
+                    .toJSON(),
             ],
         });
 
@@ -93,7 +96,49 @@ client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}!`);
 })
 
-var currentConnection = null
+var currentChannelUserId = []
+var currentGuildId = ''
+
+async function textToSpeech(message, connection) {
+    console.log({
+        voice_state: connection.state.status,
+        content: message
+    })
+    
+    const voiceURL = googleTTS.getAudioUrl(message, {
+        lang: 'vi',
+        slow: false,
+        host: 'https://translate.google.com',
+        splitPunct: ',.?',
+    })
+    const { data } = await axios.get(voiceURL, {
+        responseType: 'arraybuffer',
+        headers: {
+            "Content-Type": 'audio/mpeg'
+        }
+    })
+    const writer = fs.createWriteStream('./audio.mp3')
+    writer.write(data)
+
+    const player = createAudioPlayer()
+    const resource = createAudioResource('./audio.mp3')
+    player.play(resource)
+    
+    connection?.subscribe(player)
+}
+
+async function joinChannel(interaction) {
+    const voiceChannel = interaction.options.getChannel('channel')
+    const voiceConnection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: interaction.guildId,
+        adapterCreator: interaction.guild.voiceAdapterCreator,
+    })
+    await entersState(voiceConnection, VoiceConnectionStatus.Ready, 5e3)
+    await textToSpeech("Ếch xanh đã tham gia kênh chat", voiceConnection)
+    console.log(`Joining channel ${voiceChannel.id}`)
+    return voiceChannel
+}
 
 client.on('interactionCreate', async interaction => {
     try {
@@ -104,56 +149,29 @@ client.on('interactionCreate', async interaction => {
             const voiceMessage = interaction.options.getString('content')
             const voiceConnection = getVoiceConnection(interaction.guildId)
 
-            console.log({
-                voice_state: voiceConnection.state.status,
-                content: voiceMessage
+            textToSpeech(voiceMessage, voiceConnection).then(async () => {
+                await interaction.reply(`>>> ${voiceMessage}`);
             })
-            
-            const voiceURL = googleTTS.getAudioUrl(voiceMessage, {
-                lang: 'vi',
-                slow: false,
-                host: 'https://translate.google.com',
-                splitPunct: ',.?',
-            })
-            const { data } = await axios.get(voiceURL, {
-                responseType: 'arraybuffer',
-                headers: {
-                    "Content-Type": 'audio/mpeg'
-                }
-            })
-            const writer = fs.createWriteStream('./audio.mp3')
-            writer.write(data)
-
-            const player = createAudioPlayer()
-            const resource = createAudioResource('./audio.mp3')
-            player.play(resource)
-            
-            voiceConnection?.subscribe(player)
-
-            // voiceConnection?.playOpusPacket(data)
-
-            await interaction.reply(`${voiceMessage}`);
         }
 
         // JOIN CHANNEL
         if (interaction.commandName === 'join') {
-            const voiceChannel = interaction.options.getChannel('channel')
-            const voiceConnection = joinVoiceChannel({
-                channelId: voiceChannel.id,
-                guildId: interaction.guildId,
-                adapterCreator: interaction.guild.voiceAdapterCreator,
+            // RESET 
+            currentChannelUserId = []
+            currentGuildId = ''
+            
+            joinChannel(interaction).then(async (voiceChannel) => {
+                await interaction.reply(`Ếch xanh đã tham gia **${voiceChannel.name}**.`)
             })
-            await entersState(voiceConnection, VoiceConnectionStatus.Ready, 5e3)
-            console.log(`Joining channel ${voiceChannel.id}`)
-            await interaction.reply(`Join channel **${voiceChannel.name}**`)
         }
 
         // DISCONNECT
-        if (interaction.commandName === 'disconnect') {
+        if (interaction.commandName === 'disconnect'
+            || interaction.commandName === 'leave') {
             const voiceConnection = getVoiceConnection(interaction.guildId)
             voiceConnection?.destroy()
 
-            await interaction.reply(`Bot has disconnected`)
+            await interaction.reply(`Ếch xanh đã trở về môi trường hoang dã.`)
         }
     } catch (error) {
         console.log(error);
