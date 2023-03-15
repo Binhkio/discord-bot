@@ -2,7 +2,13 @@
 discord.js: ^14.7.1
 */
 
-const { joinVoiceChannel, getVoiceConnection, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
+const { joinVoiceChannel,
+    getVoiceConnection,
+    createAudioPlayer,
+    createAudioResource,
+    entersState,
+    VoiceConnectionStatus
+} = require('@discordjs/voice');
 const { default: axios } = require('axios');
 const { 
     REST, 
@@ -13,11 +19,17 @@ const {
     ChannelType
 } = require('discord.js');
 const { createReadStream } = require('fs');
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildVoiceStates,
+    ]
+});
 
 const googleTTS = require('google-tts-api')
-const fs = require('fs')
-const pathToFfmpeg = require('ffmpeg-static')
+const fs = require('fs');
 
 const tokenArr = [
     "MTA4MzczMjg1NTUxMjg5OTYzNQ",
@@ -59,6 +71,11 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
                             .addChannelTypes(ChannelType.GuildVoice)
                     )
                     .toJSON(),
+                new SlashCommandBuilder()
+                    .setName('disconnect')
+                    .setDescription('Disconnect from current channel')
+                    .toJSON(),
+
             ],
         });
 
@@ -87,8 +104,10 @@ client.on('interactionCreate', async interaction => {
             const voiceMessage = interaction.options.getString('content')
             const voiceConnection = getVoiceConnection(interaction.guildId)
 
-            const player = createAudioPlayer()
-            voiceConnection.subscribe(player)
+            console.log({
+                voice_state: voiceConnection.state.status,
+                content: voiceMessage
+            })
             
             const voiceURL = googleTTS.getAudioUrl(voiceMessage, {
                 lang: 'vi',
@@ -105,8 +124,13 @@ client.on('interactionCreate', async interaction => {
             const writer = fs.createWriteStream('./audio.mp3')
             writer.write(data)
 
-            const resource = createAudioResource(createReadStream('./audio.mp3'))
+            const player = createAudioPlayer()
+            const resource = createAudioResource('./audio.mp3')
             player.play(resource)
+            
+            voiceConnection?.subscribe(player)
+
+            // voiceConnection?.playOpusPacket(data)
 
             await interaction.reply(`${voiceMessage}`);
         }
@@ -119,14 +143,15 @@ client.on('interactionCreate', async interaction => {
                 guildId: interaction.guildId,
                 adapterCreator: interaction.guild.voiceAdapterCreator,
             })
-            currentConnection = voiceConnection
+            await entersState(voiceConnection, VoiceConnectionStatus.Ready, 5e3)
+            console.log(`Joining channel ${voiceChannel.id}`)
             await interaction.reply(`Join channel **${voiceChannel.name}**`)
         }
 
         // DISCONNECT
         if (interaction.commandName === 'disconnect') {
             const voiceConnection = getVoiceConnection(interaction.guildId)
-            voiceConnection.disconnect()
+            voiceConnection?.destroy()
 
             await interaction.reply(`Bot has disconnected`)
         }
