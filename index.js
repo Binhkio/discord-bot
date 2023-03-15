@@ -120,11 +120,13 @@ async function textToSpeech(message, connection) {
     const writer = fs.createWriteStream('./audio.mp3')
     writer.write(data)
 
-    const player = createAudioPlayer()
-    const resource = createAudioResource('./audio.mp3')
-    player.play(resource)
-    
-    connection?.subscribe(player)
+    setTimeout(()=>{
+        const player = createAudioPlayer()
+        const resource = createAudioResource('./audio.mp3')
+        player.play(resource)
+        
+        connection?.subscribe(player)
+    }, 200)
 }
 
 async function joinChannel(interaction) {
