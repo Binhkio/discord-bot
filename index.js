@@ -22,8 +22,7 @@ const {
 
 const googleTTS = require('google-tts-api')
 const fs = require('fs');
-const { api } = require('./chatgpt');
-const { Configuration, OpenAIApi } = require('openai');
+const { Configuration, OpenAIApi } = require('openai'); 
 
 const client = new Client({
     intents: [
