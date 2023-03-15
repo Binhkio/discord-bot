@@ -16,9 +16,14 @@ const {
     Client, 
     GatewayIntentBits, 
     SlashCommandBuilder,
-    ChannelType
+    ChannelType,
+    AttachmentBuilder
 } = require('discord.js');
-const { createReadStream } = require('fs');
+
+const googleTTS = require('google-tts-api')
+const fs = require('fs');
+const { api } = require('./chatgpt');
+const { Configuration, OpenAIApi } = require('openai');
 
 const client = new Client({
     intents: [
@@ -27,9 +32,6 @@ const client = new Client({
         GatewayIntentBits.GuildVoiceStates,
     ]
 });
-
-const googleTTS = require('google-tts-api')
-const fs = require('fs');
 
 const tokenArr = [
     "MTA4MzczMjg1NTUxMjg5OTYzNQ",
@@ -41,6 +43,11 @@ const CLIENT_ID = "1083732855512899635";
 
 //Invite link:  https://discord.com/api/oauth2/authorize?client_id=1083732855512899635&permissions=137471948864&scope=bot
 
+process.on('unhandledRejection', (reason, p) => {
+    console.log("Reason", reason, "Promise", p);
+}).on('uncaughtException', err => {
+    console.log("uncaughtException", err);
+})
 
 
 //App commands
@@ -72,6 +79,15 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
                     )
                     .toJSON(),
                 new SlashCommandBuilder()
+                    .setName('gpt')
+                    .setDescription('Chat with ChatGPT')
+                    .addStringOption(option => 
+                        option.setName('message')
+                            .setDescription('Type what you want to chat with ChatGPT')
+                            .setRequired(true)
+                    )
+                    .toJSON(),
+                new SlashCommandBuilder()
                     .setName('disconnect')
                     .setDescription('Disconnect from current channel')
                     .toJSON(),
@@ -95,9 +111,6 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}!`);
 })
-
-var currentChannelUserId = []
-var currentGuildId = ''
 
 async function textToSpeech(message, connection) {
     console.log({
@@ -129,17 +142,29 @@ async function textToSpeech(message, connection) {
     }, 200)
 }
 
-async function joinChannel(interaction) {
-    const voiceChannel = interaction.options.getChannel('channel')
-    const voiceConnection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: interaction.guildId,
-        adapterCreator: interaction.guild.voiceAdapterCreator,
-    })
+async function joinChannel(voiceChannel, voiceConnection) {
     await entersState(voiceConnection, VoiceConnectionStatus.Ready, 5e3)
     await textToSpeech("Ếch xanh đã tham gia kênh chat", voiceConnection)
     console.log(`Joining channel ${voiceChannel.id}`)
-    return voiceChannel
+}
+
+async function chatGPT(message, replyCallback){
+    const configuration = new Configuration({
+        apiKey: "sk-"+"vxQ0rzd0diusInHtnUGbT3BlbkFJF4NyAjiaVWq989lUzvLa"
+    })
+    const openAI = new OpenAIApi(configuration)
+    const res = await openAI.createCompletion({
+        model: 'text-davinci-003',
+        prompt: message,
+        max_tokens: 2048,
+    })
+    const resMsg = '> ' + message + res.data.choices[0].text
+    if(resMsg.length >= 2000){
+        const attachment = new AttachmentBuilder(Buffer.from(resMsg, 'utf-8'), {name: 'response.txt'})
+        await replyCallback({files: [attachment]})
+    }else{
+        await replyCallback(resMsg)
+    }
 }
 
 client.on('interactionCreate', async interaction => {
@@ -150,19 +175,40 @@ client.on('interactionCreate', async interaction => {
         if (interaction.commandName === 'say') {
             const voiceMessage = interaction.options.getString('content')
             const voiceConnection = getVoiceConnection(interaction.guildId)
+            if(!voiceConnection?.state?.status){
+                await interaction.reply(`Ếch chưa vào kênh. Hãy sử dụng \`/join\` để triệu hồi Ếch`);
+                return;
+            }            
 
             textToSpeech(voiceMessage, voiceConnection).then(async () => {
                 await interaction.reply(`>>> ${voiceMessage}`);
             })
         }
 
+        // CHAT GPT
+        if (interaction.commandName === 'gpt') {
+            const message = interaction.options.getString('message')
+            // const connection = getVoiceConnection(interaction.guildId)
+
+            await interaction.deferReply({content: "Kết nối với ChatGPT..."})
+
+            chatGPT(message, async (replyContent) => {
+                await interaction.editReply(replyContent)
+            })
+            // textToSpeech(voiceMessage, voiceConnection).then(async () => {
+            //     await interaction.reply(`>>> ${voiceMessage}`);
+            // })
+        }
+
         // JOIN CHANNEL
         if (interaction.commandName === 'join') {
-            // RESET 
-            currentChannelUserId = []
-            currentGuildId = ''
-            
-            joinChannel(interaction).then(async (voiceChannel) => {
+            const voiceChannel = interaction.options.getChannel('channel')
+            const voiceConnection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: interaction.guildId,
+                adapterCreator: interaction.guild.voiceAdapterCreator,
+            })
+            joinChannel(voiceChannel, voiceConnection).then(async () => {
                 await interaction.reply(`Ếch xanh đã tham gia **${voiceChannel.name}**.`)
             })
         }
