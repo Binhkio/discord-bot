@@ -10,19 +10,20 @@ const { joinVoiceChannel,
     VoiceConnectionStatus
 } = require('@discordjs/voice');
 const { default: axios } = require('axios');
-const { 
-    REST, 
-    Routes, 
-    Client, 
-    GatewayIntentBits, 
+const {
+    REST,
+    Routes,
+    Client,
+    GatewayIntentBits,
     SlashCommandBuilder,
     ChannelType,
     AttachmentBuilder
 } = require('discord.js');
+const { Readable } = require('stream')
 
 const googleTTS = require('google-tts-api')
 const fs = require('fs');
-const { Configuration, OpenAIApi } = require('openai'); 
+const { Configuration, OpenAIApi } = require('openai');
 
 const client = new Client({
     intents: [
@@ -61,7 +62,7 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
                 new SlashCommandBuilder()
                     .setName('say')
                     .setDescription('Say something in voice channel')
-                    .addStringOption(option => 
+                    .addStringOption(option =>
                         option.setName('content')
                             .setDescription('Type what you want bot to say')
                             .setRequired(true)
@@ -70,7 +71,7 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
                 new SlashCommandBuilder()
                     .setName('join')
                     .setDescription('Join a voice channel')
-                    .addChannelOption((option) => 
+                    .addChannelOption((option) =>
                         option.setName('channel')
                             .setDescription('The channel to join')
                             .setRequired(true)
@@ -80,7 +81,7 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
                 new SlashCommandBuilder()
                     .setName('gpt')
                     .setDescription('Chat with ChatGPT')
-                    .addStringOption(option => 
+                    .addStringOption(option =>
                         option.setName('message')
                             .setDescription('Type what you want to chat with ChatGPT')
                             .setRequired(true)
@@ -116,7 +117,7 @@ async function textToSpeech(message, connection) {
         voice_state: connection.state.status,
         content: message
     })
-    
+
     const voiceURL = googleTTS.getAudioUrl(message, {
         lang: 'vi',
         slow: false,
@@ -129,14 +130,13 @@ async function textToSpeech(message, connection) {
             "Content-Type": 'audio/mpeg'
         }
     })
-    const writer = fs.createWriteStream('./audio.mp3')
-    writer.write(data)
-
-    setTimeout(()=>{
+    
+    setTimeout(() => {
         const player = createAudioPlayer()
-        const resource = createAudioResource('./audio.mp3')
+        const streamData = Readable.from(data)
+        const resource = createAudioResource(streamData)
         player.play(resource)
-        
+
         connection?.subscribe(player)
     }, 200)
 }
@@ -147,9 +147,9 @@ async function joinChannel(voiceChannel, voiceConnection) {
     console.log(`Joining channel ${voiceChannel.id}`)
 }
 
-async function chatGPT(message, replyCallback){
+async function chatGPT(message, replyCallback) {
     const configuration = new Configuration({
-        apiKey: "sk-"+"vxQ0rzd0diusInHtnUGbT3BlbkFJF4NyAjiaVWq989lUzvLa"
+        apiKey: "sk-" + "vxQ0rzd0diusInHtnUGbT3BlbkFJF4NyAjiaVWq989lUzvLa"
     })
     const openAI = new OpenAIApi(configuration)
     const res = await openAI.createCompletion({
@@ -158,10 +158,10 @@ async function chatGPT(message, replyCallback){
         max_tokens: 2048,
     })
     const resMsg = '> ' + message + res.data.choices[0].text
-    if(resMsg.length >= 2000){
-        const attachment = new AttachmentBuilder(Buffer.from(resMsg, 'utf-8'), {name: 'response.txt'})
-        await replyCallback({files: [attachment]})
-    }else{
+    if (resMsg.length >= 2000) {
+        const attachment = new AttachmentBuilder(Buffer.from(resMsg, 'utf-8'), { name: 'response.txt' })
+        await replyCallback({ files: [attachment] })
+    } else {
         await replyCallback(resMsg)
     }
 }
@@ -169,15 +169,15 @@ async function chatGPT(message, replyCallback){
 client.on('interactionCreate', async interaction => {
     try {
         if (!interaction.isChatInputCommand()) return;
-        
+
         // VOICE SPEAK
         if (interaction.commandName === 'say') {
             const voiceMessage = interaction.options.getString('content')
             const voiceConnection = getVoiceConnection(interaction.guildId)
-            if(!voiceConnection?.state?.status){
+            if (!voiceConnection?.state?.status) {
                 await interaction.reply(`Ếch chưa vào kênh. Hãy sử dụng \`/join\` để triệu hồi Ếch`);
                 return;
-            }            
+            }
 
             textToSpeech(voiceMessage, voiceConnection).then(async () => {
                 await interaction.reply(`>>> ${voiceMessage}`);
@@ -189,7 +189,7 @@ client.on('interactionCreate', async interaction => {
             const message = interaction.options.getString('message')
             // const connection = getVoiceConnection(interaction.guildId)
 
-            await interaction.deferReply({content: "Kết nối với ChatGPT..."})
+            await interaction.deferReply({ content: "Kết nối với ChatGPT..." })
 
             chatGPT(message, async (replyContent) => {
                 await interaction.editReply(replyContent)
