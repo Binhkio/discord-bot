@@ -24,6 +24,9 @@ const { Readable } = require('stream')
 const googleTTS = require('google-tts-api')
 const fs = require('fs');
 const { Configuration, OpenAIApi } = require('openai');
+const keepAlive = require('./server')
+
+keepAlive()
 
 const client = new Client({
     intents: [
@@ -48,6 +51,8 @@ process.on('unhandledRejection', (reason, p) => {
 }).on('uncaughtException', err => {
     console.log("uncaughtException", err);
 })
+
+
 
 
 //App commands
@@ -107,7 +112,6 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 
 //Main
-
 client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}!`);
 })
@@ -130,7 +134,7 @@ async function textToSpeech(message, connection) {
             "Content-Type": 'audio/mpeg'
         }
     })
-    
+
     setTimeout(() => {
         const player = createAudioPlayer()
         const streamData = Readable.from(data)
@@ -157,6 +161,7 @@ async function chatGPT(message, replyCallback) {
         prompt: message,
         max_tokens: 2048,
     })
+    console.log(res.data)
     const resMsg = '> ' + message + res.data.choices[0].text
     if (resMsg.length >= 2000) {
         const attachment = new AttachmentBuilder(Buffer.from(resMsg, 'utf-8'), { name: 'response.txt' })
