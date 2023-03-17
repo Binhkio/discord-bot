@@ -48,10 +48,6 @@ export const registerCommand = async () => {
                                 value: 'code',
                             })
                     )
-                    .addBooleanOption(option => 
-                        option.setName('tts')
-                            .setDescription('Use Text to Speech')
-                    )
                     .toJSON(),
                 new SlashCommandBuilder()
                     .setName('play')

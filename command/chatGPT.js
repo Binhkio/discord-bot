@@ -1,9 +1,7 @@
 import { AttachmentBuilder } from "discord.js"
 import { Configuration, OpenAIApi } from "openai"
-import { textToSpeech } from "./textToSpeech.js"
 
-
-export const chatGPT = async (message, type, useTTS, connection, replyCallback) => {
+export const chatGPT = async (message, type, replyCallback) => {
     const configuration = new Configuration({
         apiKey: "sk-" + "vxQ0rzd0diusInHtnUGbT3BlbkFJF4NyAjiaVWq989lUzvLa"
     })
@@ -24,9 +22,5 @@ export const chatGPT = async (message, type, useTTS, connection, replyCallback) 
         type === 'text' || !type
         ? await replyCallback('> ' + message + res.data.choices[0].text)
         : await replyCallback('> ' + message + '\n```js' + res.data.choices[0].text + '\n```')
-    }
-
-    if(!!useTTS === true){
-        await textToSpeech(res.data.choices[0].text, connection)
     }
 }

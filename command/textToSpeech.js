@@ -1,10 +1,10 @@
-import { createAudioPlayer, createAudioResource } from "@discordjs/voice"
+import { AudioPlayerStatus, createAudioPlayer, createAudioResource } from "@discordjs/voice"
 import axios from "axios"
 import { Readable } from "stream"
 import googleTTS from "google-tts-api"
 
 
-export const textToSpeech = async (message, connection) => {
+export const textToSpeech = async (message, connection, subscription, reSubcribe) => {
     console.log({
         voice_state: connection.state.status,
         content: message
@@ -29,6 +29,15 @@ export const textToSpeech = async (message, connection) => {
         const resource = createAudioResource(streamData)
         player.play(resource)
 
-        connection?.subscribe(player)
+        if(!!subscription){
+            subscription.unsubscribe()
+        }
+        const newSubcription = connection?.subscribe(player)
+        player.once(AudioPlayerStatus.Idle, () => {
+            newSubcription.unsubscribe()
+            if(!!subscription){
+                reSubcribe()
+            }
+        })
     }, 200)
 }

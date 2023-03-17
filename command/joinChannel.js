@@ -1,8 +1,13 @@
-import { entersState, VoiceConnectionStatus } from "@discordjs/voice"
-import { textToSpeech } from "./textToSpeech.js"
+import { entersState, joinVoiceChannel, VoiceConnectionStatus } from "@discordjs/voice"
 
-export const joinChannel = async (voiceChannel, voiceConnection) => {
+export const joinChannel = async (voiceChannel, interaction) => {
+    const voiceConnection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: interaction.guildId,
+        adapterCreator: interaction.guild.voiceAdapterCreator,
+    })
     await entersState(voiceConnection, VoiceConnectionStatus.Ready, 5e3)
-    await textToSpeech("Ếch xanh đã tham gia kênh chat", voiceConnection)
-    console.log(`Joining channel ${voiceChannel.id}`)
+    console.log(`Joined channel ${voiceChannel.id}, ${voiceChannel.name}`)
+
+    return voiceConnection
 }

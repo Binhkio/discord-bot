@@ -4,7 +4,10 @@ discord.js: ^14.7.1
 
 import { 
     joinVoiceChannel,
-    getVoiceConnection
+    getVoiceConnection,
+    createAudioPlayer,
+    NoSubscriberBehavior,
+    AudioPlayerStatus
 } from '@discordjs/voice'
 import {
     Client,
@@ -15,6 +18,7 @@ import { registerCommand } from './register_command.js'
 import { chatGPT } from './command/chatGPT.js'
 import { joinChannel } from './command/joinChannel.js'
 import { textToSpeech } from './command/textToSpeech.js'
+import { PlayMusic } from './command/playMusic.js'
 
 keepAlive()
 
@@ -40,9 +44,75 @@ process.on('unhandledRejection', (reason, p) => {
 //App commands
 registerCommand()
 
-//Main
+// Variable
+const guildList = new Map()
+
+// Event
 client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}!`);
+    client.guilds.cache.forEach(guild => {
+        guildList.set(guild.id, {
+            allGuildVoiceMembers: new Map(),
+            voiceMembers: new Map(),
+            voiceChannel: '',
+            music: {
+                status: 'idle',
+                songsQueue: [],
+                subscription: null,
+            }
+        })
+    })
+})
+
+
+client.on("voiceStateUpdate", async (oldState, newState) => {
+    if(newState.channel 
+        && newState.channel.members.size !== guildList.get(newState.guild.id).voiceMembers.size){
+        // Thong tin thanh vien trong tat ca cac kenh
+        guildList
+            .get(newState.guild.id)
+            .allGuildVoiceMembers
+            .set(newState.member.user.id, newState.channel)
+
+        // Thong tin thanh vien trong kenh hien tai
+        const voiceConnection = getVoiceConnection(newState.guild.id)
+        if(newState.member.user.id === process.env.CLIENT_ID){
+            guildList.get(newState.guild.id).voiceChannel = newState.channel.id
+            newState.channel.members.forEach(member => {
+                guildList.get(newState.guild.id).voiceMembers.set(member.user.id, member)
+            })
+        }else if(guildList.get(newState.guild.id).voiceMembers.has(process.env.CLIENT_ID)
+                && newState.channel.id === guildList.get(newState.guild.id).voiceChannel){
+            guildList.get(newState.guild.id).voiceMembers.set(newState.member.user.id, newState.member)
+            const name = newState.member.nickname || newState.member.user.tag.split("#")[0]
+            await textToSpeech(`Chào ${name}`, voiceConnection,
+                guildList.get(newState.guild.id).music?.subscription,
+                () => {
+                    voiceConnection.subscribe(guildList.get(newState.guild.id).music?.player)
+                })
+        }
+        console.log("[new] Total members: ", guildList.get(newState.guild.id).voiceMembers.size);
+    } else if(oldState.channel
+        && oldState.channel.members.size !== guildList.get(oldState.guild.id).voiceMembers.size){
+        // Thong tin thanh vien trong tat ca cac kenh
+        guildList.get(oldState.guild.id).allGuildVoiceMembers.delete(oldState.member.user.id)
+        
+        // Thong tin thanh vien trong kenh hien tai
+        const voiceConnection = getVoiceConnection(oldState.guild.id)
+        if(oldState.member.user.id === process.env.CLIENT_ID){
+            guildList.get(oldState.guild.id).voiceMembers = new Map()
+        }else if(guildList.get(oldState.guild.id).voiceMembers.has(process.env.CLIENT_ID)
+                && oldState.channel.id === guildList.get(oldState.guild.id).voiceChannel){
+            guildList.get(oldState.guild.id).voiceMembers.delete(oldState.member.user.id)
+            const name = oldState.member.nickname || oldState.member.user.tag.split("#")[0]
+            await textToSpeech(`Tạm biệt ${name}`, voiceConnection,
+                guildList.get(newState.guild.id).music?.subscription,
+                () => {
+                    voiceConnection.subscribe(guildList.get(newState.guild.id).music?.player)
+                })
+        }
+        console.log("[old] Total members: ", guildList.get(oldState.guild.id).voiceMembers.size);
+    }
 })
 
 client.on('interactionCreate', async interaction => {
@@ -52,13 +122,19 @@ client.on('interactionCreate', async interaction => {
         // VOICE SPEAK
         if (interaction.commandName === 'say') {
             const voiceMessage = interaction.options.getString('content')
-            const voiceConnection = getVoiceConnection(interaction.guildId)
-            if (!voiceConnection?.state?.status) {
-                await interaction.reply(`Ếch chưa vào kênh. Hãy sử dụng \`/join\` để triệu hồi Ếch`);
-                return;
+            let voiceConnection = getVoiceConnection(interaction.guildId)
+            if (!voiceConnection) {
+                voiceConnection = 
+                    await joinChannel(
+                        guildList.get(interaction.guildId).allGuildVoiceMembers.get(interaction.member.user.id),
+                        interaction)
             }
-
-            textToSpeech(voiceMessage, voiceConnection).then(async () => {
+            
+            textToSpeech(voiceMessage, voiceConnection,
+                guildList.get(interaction.guildId).music?.subscription,
+                () => {
+                    voiceConnection.subscribe(guildList.get(interaction.guildId).music?.player)
+                }).then(async () => {
                 await interaction.reply(`>>> ${voiceMessage}`);
             })
         }
@@ -67,12 +143,10 @@ client.on('interactionCreate', async interaction => {
         if (interaction.commandName === 'gpt') {
             const message = interaction.options.getString('message')
             const type = interaction.options.getString('type')
-            const useTTS = interaction.options.getBoolean('tts')
-            const voiceConnection = getVoiceConnection(interaction.guildId)
 
             await interaction.deferReply({ content: "Kết nối với ChatGPT..." })
 
-            chatGPT(message, type, useTTS, voiceConnection, async (replyContent) => {
+            chatGPT(message, type, async (replyContent) => {
                 await interaction.editReply(replyContent)
             })
         }
@@ -80,17 +154,142 @@ client.on('interactionCreate', async interaction => {
         // JOIN CHANNEL
         if (interaction.commandName === 'join') {
             const voiceChannel = interaction.options.getChannel('channel')
-            const voiceConnection = joinVoiceChannel({
-                channelId: voiceChannel.id,
-                guildId: interaction.guildId,
-                adapterCreator: interaction.guild.voiceAdapterCreator,
-            })
-            joinChannel(voiceChannel, voiceConnection).then(async () => {
-                await interaction.reply(`Ếch xanh đã tham gia **${voiceChannel.name}**.`)
-            })
+            if(!getVoiceConnection(interaction.guildId)){
+                joinChannel(voiceChannel, interaction).then(async (voiceConnection) => {
+                    await textToSpeech("Ếch xanh đã tham gia kênh chat", voiceConnection,
+                        guildList.get(interaction.guildId).music?.subscription,
+                        () => {})
+                    await interaction.reply(`Ếch xanh đã tham gia **${voiceChannel.name}**.`)
+                })
+            }
         }
 
         // PLAY MUSIC
+        if (interaction.commandName === 'play') {
+            const url = interaction.options.getString('url')
+            const now = interaction.options.getBoolean('now')
+            let voiceConnection = getVoiceConnection(interaction.guildId)
+            if (!voiceConnection) {
+                const channel = guildList.get(interaction.guildId).allGuildVoiceMembers.get(interaction.member.user.id)
+                voiceConnection = await joinChannel(channel, interaction)
+            }
+            // play
+            const Music = guildList.get(interaction.guildId).music
+            if(!Music.player){
+                console.log("Create new Player");
+                const player = createAudioPlayer({
+                    behaviors: {
+                        noSubscriber: NoSubscriberBehavior.Pause
+                    }
+                })
+                player.addListener('keepPlaying', async (songsQueue, player, status, interaction) => {
+                    if(songsQueue.length > 0 && status === 'idle'){
+                        const nextUrl = songsQueue.shift()
+                        await interaction.channel.send(`**Đang phát**\n> ${nextUrl}`)
+                        await PlayMusic(nextUrl, player)
+                    }else if(songsQueue.length < 1 && status === 'idle'){
+                        await interaction.reply("Không có nhạc trong hàng chờ!")
+                    }
+                })
+                player.addListener('pausePlaying', async (songsQueue, player, status, interaction) => {
+                    if(status === 'playing'
+                        || status === 'buffering'){
+                        player.pause()
+                        if(!interaction.replied)
+                            await interaction.reply("> Tạm dừng")
+                        else
+                            await interaction.editReply("> Tạm dừng")
+                    }
+                })
+                player.addListener('resumePlaying', async (songsQueue, player, status, interaction) => {
+                    if(status === 'pause'){
+                        player.unpause()
+                        if(!interaction.replied)
+                            await interaction.reply("> Tiếp tục")
+                        else
+                            await interaction.editReply("> Tiếp tục")
+                    }
+                })
+                player.addListener('skipPlaying', async (songsQueue, player, status, interaction) => {
+                    if(songsQueue.length > 0){
+                        if(status === 'playing'
+                            || status === 'buffering'){
+                            player.stop(true)
+                        }
+                        await interaction.reply("> Chuyển nhạc")
+                        // player.emit("keepPlaying", Music.songsQueue, Music.player, Music.status, interaction)
+                    }else{
+                        await interaction.reply("Không có nhạc trong hàng chờ!")
+                    }
+                })
+                player.on(AudioPlayerStatus.Playing, () => {
+                    console.log('Playing...');
+                    Music.status = 'playing'
+                })
+                player.on(AudioPlayerStatus.Idle, () => {
+                    console.log('Idle...');
+                    Music.status = 'idle'
+                    if(Music.songsQueue.length > 0){
+                        player.emit('keepPlaying', Music.songsQueue, Music.player, Music.status, interaction)
+                    }
+                })
+                player.on(AudioPlayerStatus.Buffering, () => {
+                    console.log('Buffering...');
+                    Music.status = 'buffering'
+                })
+                player.on(AudioPlayerStatus.Paused, () => {
+                    console.log('Paused...');
+                    Music.status = 'pause'
+                })
+                player.on('error', err => {
+                    console.log("Player ERROR", err)
+                })
+                Music.subscription = voiceConnection.subscribe(player)
+                Music.player = player
+            }
+
+            if(!now){
+                Music.songsQueue.push(url)
+                await interaction.reply(`**Thêm vào hàng chờ**\n> ${url}`)
+                if(Music.status === 'idle'
+                    && Music.songsQueue.length === 1){
+                    Music.player.emit('keepPlaying', Music.songsQueue, Music.player, Music.status, interaction)
+                }
+            }else{
+                Music.songsQueue.unshift(url)
+                Music.player.emit('skipPlaying', Music.songsQueue, Music.player, Music.status, interaction)
+            }
+        }
+
+        // PAUSE
+        if (interaction.commandName === 'pause') {
+            const Music = guildList.get(interaction.guildId).music
+            if(!Music.player){
+                await interaction.reply("Không có nhạc trong hàng chờ!")
+            }else{
+                Music.player.emit("pausePlaying", Music.songsQueue, Music.player, Music.status, interaction)
+            }
+        }
+
+        // RESUME
+        if (interaction.commandName === 'resume') {
+            const Music = guildList.get(interaction.guildId).music
+            if(!Music.player){
+                await interaction.reply("Không có nhạc trong hàng chờ!")
+            }else{
+                Music.player.emit("resumePlaying", Music.songsQueue, Music.player, Music.status, interaction)
+            }
+        }
+
+        // SKIP
+        if (interaction.commandName === 'skip') {
+            const Music = guildList.get(interaction.guildId).music
+            if(!Music.player){
+                await interaction.reply("Không có nhạc trong hàng chờ!")
+            }else{
+                Music.player.emit("skipPlaying", Music.songsQueue, Music.player, Music.status, interaction)
+            }
+        }
 
         // DISCONNECT
         if (interaction.commandName === 'disconnect'
@@ -98,7 +297,7 @@ client.on('interactionCreate', async interaction => {
             const voiceConnection = getVoiceConnection(interaction.guildId)
             voiceConnection?.destroy()
 
-            await interaction.reply(`Ếch xanh đã trở về môi trường hoang dã.`)
+            await interaction.reply(`Ếch xanh đã thoát.`)
         }
     } catch (error) {
         console.log(error);
