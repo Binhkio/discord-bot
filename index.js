@@ -181,18 +181,18 @@ client.on('interactionCreate', async interaction => {
             const Music = guildList.get(interaction.guildId).music
             if(!Music.player){
                 console.log("Create new Player");
-                const player = createPlayer()
+                const player = createPlayer(Music, interaction)
                 Music.subscription = voiceConnection.subscribe(player)
                 Music.player = player
             }
 
             if(!now){
                 Music.songsQueue.push(url)
-                await interaction.reply(`**Thêm vào hàng chờ**\n> ${url}`)
                 if(Music.status === 'idle'
-                    && Music.songsQueue.length === 1){
+                && Music.songsQueue.length === 1){
                     Music.player.emit('keepPlaying', Music.songsQueue, Music.player, Music.status, interaction)
                 }
+                await interaction.reply(`**Thêm vào hàng chờ**\n> ${url}`)
             }else{
                 Music.songsQueue.unshift(url)
                 Music.player.emit('skipPlaying', Music.songsQueue, Music.player, Music.status, interaction)
@@ -200,7 +200,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         // PLAY LIST
-        if (interaction.commandName === 'playlist') {
+        if (interaction.commandName === 'addlist') {
             const url = interaction.options.getString('url')
             const now = interaction.options.getBoolean('now')
 
@@ -216,26 +216,27 @@ client.on('interactionCreate', async interaction => {
             }
 
             const listMusic = await getListMusic(url)
+            const listMusicUrl = listMusic.videos.map(video => video.url)
             
-            // const Music = guildList.get(interaction.guildId).music
-            // if(!Music.player){
-            //     console.log("Create new Player");
-            //     const player = createPlayer()
-            //     Music.subscription = voiceConnection.subscribe(player)
-            //     Music.player = player
-            // }
+            const Music = guildList.get(interaction.guildId).music
+            if(!Music.player){
+                console.log("Create new Player");
+                const player = createPlayer(Music, interaction)
+                Music.subscription = voiceConnection.subscribe(player)
+                Music.player = player
+            }
 
-            // if(!now){
-            //     Music.songsQueue.push(url)
-            //     await interaction.reply(`**Thêm vào hàng chờ**\n> ${url}`)
-            //     if(Music.status === 'idle'
-            //         && Music.songsQueue.length === 1){
-            //         Music.player.emit('keepPlaying', Music.songsQueue, Music.player, Music.status, interaction)
-            //     }
-            // }else{
-            //     Music.songsQueue.unshift(url)
-            //     Music.player.emit('skipPlaying', Music.songsQueue, Music.player, Music.status, interaction)
-            // }
+            if(!now){
+                Music.songsQueue = Music.songsQueue.concat(listMusicUrl)
+                if(Music.status === 'idle'
+                && Music.songsQueue.length === listMusicUrl.length){
+                    Music.player.emit('keepPlaying', Music.songsQueue, Music.player, Music.status, interaction)
+                }
+                await interaction.reply(`**Thêm danh sách nhạc**\n> ${url}`)
+            }else{
+                Music.songsQueue = listMusicUrl.concat(Music.songsQueue)
+                Music.player.emit('skipPlaying', Music.songsQueue, Music.player, Music.status, interaction)
+            }
         }
 
         // PAUSE
@@ -265,6 +266,16 @@ client.on('interactionCreate', async interaction => {
                 await interaction.reply("Không có nhạc trong hàng chờ!")
             }else{
                 Music.player.emit("skipPlaying", Music.songsQueue, Music.player, Music.status, interaction)
+            }
+        }
+
+        // STOP
+        if (interaction.commandName === 'stop') {
+            const Music = guildList.get(interaction.guildId).music
+            if(Music.status !== 'playing'){
+                await interaction.reply("> **Dừng phát nhạc**")
+            }else{
+                Music.player.emit("stopPlaying", Music.songsQueue, Music.player, Music.status, interaction)
             }
         }
 

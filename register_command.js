@@ -63,7 +63,7 @@ export const registerCommand = async () => {
                     )
                     .toJSON(),
                 new SlashCommandBuilder()
-                    .setName('playlist')
+                    .setName('addlist')
                     .setDescription('Play a list of music by Youtube URL')
                     .addStringOption(option => 
                         option.setName('url')
@@ -86,6 +86,14 @@ export const registerCommand = async () => {
                 new SlashCommandBuilder()
                     .setName('skip')
                     .setDescription('Skip')
+                    .toJSON(),
+                new SlashCommandBuilder()
+                    .setName('stop')
+                    .setDescription('Stop play music')
+                    .toJSON(),
+                new SlashCommandBuilder()
+                    .setName('fuckoff')
+                    .setDescription('Stop play those fuvking music')
                     .toJSON(),
                 new SlashCommandBuilder()
                     .setName('disconnect')
