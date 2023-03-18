@@ -63,6 +63,19 @@ export const registerCommand = async () => {
                     )
                     .toJSON(),
                 new SlashCommandBuilder()
+                    .setName('playlist')
+                    .setDescription('Play a list of music by Youtube URL')
+                    .addStringOption(option => 
+                        option.setName('url')
+                            .setDescription('URL of Youtube list')
+                            .setRequired(true)
+                    )
+                    .addBooleanOption(option => 
+                        option.setName('now')
+                            .setDescription('Play your audio now, skip any playing audio')
+                    )
+                    .toJSON(),
+                new SlashCommandBuilder()
                     .setName('pause')
                     .setDescription('Pause')
                     .toJSON(),

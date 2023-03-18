@@ -2,12 +2,8 @@
 discord.js: ^14.7.1
 */
 
-import { 
-    joinVoiceChannel,
+import {
     getVoiceConnection,
-    createAudioPlayer,
-    NoSubscriberBehavior,
-    AudioPlayerStatus
 } from '@discordjs/voice'
 import {
     Client,
@@ -15,10 +11,11 @@ import {
 } from 'discord.js'
 import { keepAlive } from './server.js'
 import { registerCommand } from './register_command.js'
-import { chatGPT } from './command/chatGPT.js'
 import { joinChannel } from './command/joinChannel.js'
 import { textToSpeech } from './command/textToSpeech.js'
-import { PlayMusic } from './command/playMusic.js'
+import { createPlayer } from './command/player.js'
+import playdl from "play-dl"
+import { getListMusic } from './command/getListMusic.js'
 
 keepAlive()
 
@@ -141,14 +138,15 @@ client.on('interactionCreate', async interaction => {
 
         // CHAT GPT
         if (interaction.commandName === 'gpt') {
-            const message = interaction.options.getString('message')
-            const type = interaction.options.getString('type')
+            await interaction.reply("GPT không khả dụng")
+            // const message = interaction.options.getString('message')
+            // const type = interaction.options.getString('type')
 
-            await interaction.deferReply({ content: "Kết nối với ChatGPT..." })
+            // await interaction.deferReply({ content: "Kết nối với ChatGPT..." })
 
-            chatGPT(message, type, async (replyContent) => {
-                await interaction.editReply(replyContent)
-            })
+            // chatGPT(message, type, async (replyContent) => {
+            //     await interaction.editReply(replyContent)
+            // })
         }
 
         // JOIN CHANNEL
@@ -168,82 +166,22 @@ client.on('interactionCreate', async interaction => {
         if (interaction.commandName === 'play') {
             const url = interaction.options.getString('url')
             const now = interaction.options.getBoolean('now')
+
+            if(playdl.yt_validate(url) !== "video"){
+                interaction.reply(`**Link không tồn tại**`)
+                return;
+            }
+
             let voiceConnection = getVoiceConnection(interaction.guildId)
             if (!voiceConnection) {
                 const channel = guildList.get(interaction.guildId).allGuildVoiceMembers.get(interaction.member.user.id)
                 voiceConnection = await joinChannel(channel, interaction)
             }
-            // play
+            
             const Music = guildList.get(interaction.guildId).music
             if(!Music.player){
                 console.log("Create new Player");
-                const player = createAudioPlayer({
-                    behaviors: {
-                        noSubscriber: NoSubscriberBehavior.Pause
-                    }
-                })
-                player.addListener('keepPlaying', async (songsQueue, player, status, interaction) => {
-                    if(songsQueue.length > 0 && status === 'idle'){
-                        const nextUrl = songsQueue.shift()
-                        await interaction.channel.send(`**Đang phát**\n> ${nextUrl}`)
-                        await PlayMusic(nextUrl, player)
-                    }else if(songsQueue.length < 1 && status === 'idle'){
-                        await interaction.reply("Không có nhạc trong hàng chờ!")
-                    }
-                })
-                player.addListener('pausePlaying', async (songsQueue, player, status, interaction) => {
-                    if(status === 'playing'
-                        || status === 'buffering'){
-                        player.pause()
-                        if(!interaction.replied)
-                            await interaction.reply("> Tạm dừng")
-                        else
-                            await interaction.editReply("> Tạm dừng")
-                    }
-                })
-                player.addListener('resumePlaying', async (songsQueue, player, status, interaction) => {
-                    if(status === 'pause'){
-                        player.unpause()
-                        if(!interaction.replied)
-                            await interaction.reply("> Tiếp tục")
-                        else
-                            await interaction.editReply("> Tiếp tục")
-                    }
-                })
-                player.addListener('skipPlaying', async (songsQueue, player, status, interaction) => {
-                    if(songsQueue.length > 0){
-                        if(status === 'playing'
-                            || status === 'buffering'){
-                            player.stop(true)
-                        }
-                        await interaction.reply("> Chuyển nhạc")
-                        // player.emit("keepPlaying", Music.songsQueue, Music.player, Music.status, interaction)
-                    }else{
-                        await interaction.reply("Không có nhạc trong hàng chờ!")
-                    }
-                })
-                player.on(AudioPlayerStatus.Playing, () => {
-                    console.log('Playing...');
-                    Music.status = 'playing'
-                })
-                player.on(AudioPlayerStatus.Idle, () => {
-                    console.log('Idle...');
-                    Music.status = 'idle'
-                    if(Music.songsQueue.length > 0){
-                        player.emit('keepPlaying', Music.songsQueue, Music.player, Music.status, interaction)
-                    }
-                })
-                player.on(AudioPlayerStatus.Buffering, () => {
-                    console.log('Buffering...');
-                    Music.status = 'buffering'
-                })
-                player.on(AudioPlayerStatus.Paused, () => {
-                    console.log('Paused...');
-                    Music.status = 'pause'
-                })
-                player.on('error', err => {
-                    console.log("Player ERROR", err)
-                })
+                const player = createPlayer()
                 Music.subscription = voiceConnection.subscribe(player)
                 Music.player = player
             }
@@ -259,6 +197,45 @@ client.on('interactionCreate', async interaction => {
                 Music.songsQueue.unshift(url)
                 Music.player.emit('skipPlaying', Music.songsQueue, Music.player, Music.status, interaction)
             }
+        }
+
+        // PLAY LIST
+        if (interaction.commandName === 'playlist') {
+            const url = interaction.options.getString('url')
+            const now = interaction.options.getBoolean('now')
+
+            if(playdl.yt_validate(url) !== "playlist"){
+                interaction.reply(`**Link không tồn tại**`)
+                return;
+            }
+
+            let voiceConnection = getVoiceConnection(interaction.guildId)
+            if (!voiceConnection) {
+                const channel = guildList.get(interaction.guildId).allGuildVoiceMembers.get(interaction.member.user.id)
+                voiceConnection = await joinChannel(channel, interaction)
+            }
+
+            const listMusic = await getListMusic(url)
+            
+            // const Music = guildList.get(interaction.guildId).music
+            // if(!Music.player){
+            //     console.log("Create new Player");
+            //     const player = createPlayer()
+            //     Music.subscription = voiceConnection.subscribe(player)
+            //     Music.player = player
+            // }
+
+            // if(!now){
+            //     Music.songsQueue.push(url)
+            //     await interaction.reply(`**Thêm vào hàng chờ**\n> ${url}`)
+            //     if(Music.status === 'idle'
+            //         && Music.songsQueue.length === 1){
+            //         Music.player.emit('keepPlaying', Music.songsQueue, Music.player, Music.status, interaction)
+            //     }
+            // }else{
+            //     Music.songsQueue.unshift(url)
+            //     Music.player.emit('skipPlaying', Music.songsQueue, Music.player, Music.status, interaction)
+            // }
         }
 
         // PAUSE
