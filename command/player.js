@@ -1,4 +1,7 @@
 import { AudioPlayerStatus, createAudioPlayer, NoSubscriberBehavior } from "@discordjs/voice"
+import playdl from "play-dl"
+import { pauseButton, playingButton, stopButton } from "./musicButton.js"
+import { musicEmbed } from "./musicEmbed.js"
 import { PlayMusic } from "./playMusic.js"
 
 export const createPlayer = (Music, interaction) => {
@@ -7,6 +10,7 @@ export const createPlayer = (Music, interaction) => {
             noSubscriber: NoSubscriberBehavior.Pause
         }
     })
+
     player.addListener('keepPlaying', async (songsQueue, player, status, interaction) => {
         if(songsQueue.length > 0 && status === 'idle'){
             const nextUrl = songsQueue.shift()
@@ -14,29 +18,33 @@ export const createPlayer = (Music, interaction) => {
             if(isValidate !== true){
                 await interaction.channel.send(`**Link không tồn tại**\n> ${nextUrl}`)
             }else{
-                await interaction.channel.send(`**Đang phát**\n> ${nextUrl}`)
+                const { video_details } = await playdl.video_basic_info(nextUrl)
+                const user_details = interaction.user
+                console.log("__PLAY", video_details.title, user_details.username);
+
+                const embed = musicEmbed("play", video_details, user_details)
+                if(embed === false){
+                    await interaction.channel.send("PLAY FAILED")
+                }else{
+                    await interaction.channel.send({
+                        embeds: [embed],
+                        components: [playingButton()]
+                    })
+                }
             }
         }else if(songsQueue.length < 1 && status === 'idle'){
-            await interaction.channel.send("Không có nhạc trong hàng chờ!")
+            await interaction.channel.send("> **Không có nhạc trong hàng chờ!**")
         }
     })
     player.addListener('pausePlaying', async (songsQueue, player, status, interaction) => {
         if(status === 'playing'
             || status === 'buffering'){
             player.pause()
-            if(!interaction.replied)
-                await interaction.reply("> **Tạm dừng**")
-            else
-                await interaction.editReply("> **Tạm dừng**")
         }
     })
     player.addListener('resumePlaying', async (songsQueue, player, status, interaction) => {
         if(status === 'pause'){
             player.unpause()
-            if(!interaction.replied)
-                await interaction.reply("> **Tiếp tục**")
-            else
-                await interaction.editReply("> **Tiếp tục**")
         }
     })
     player.addListener('skipPlaying', async (songsQueue, player, status, interaction) => {
@@ -45,10 +53,6 @@ export const createPlayer = (Music, interaction) => {
                 || status === 'buffering'){
                 player.stop(true)
             }
-            if(interaction.replied === false)
-                await interaction.reply("> **Chuyển nhạc**")
-        }else{
-            await interaction.reply("Không có nhạc trong hàng chờ!")
         }
     })
     player.addListener('stopPlaying', async (songsQueue, player, status, interaction) => {
@@ -58,7 +62,6 @@ export const createPlayer = (Music, interaction) => {
         if(status === 'playing'){
             player.stop(true)
         }
-        await interaction.reply("> **Dừng phát nhạc**")
     })
     player.on(AudioPlayerStatus.Playing, () => {
         console.log('Playing...\tSongs queue: ', Music.songsQueue.length);
