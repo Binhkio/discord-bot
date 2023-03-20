@@ -14,23 +14,21 @@ export const createPlayer = (Music, interaction) => {
     player.addListener('keepPlaying', async (songsQueue, player, status, interaction) => {
         if(songsQueue.length > 0 && status === 'idle'){
             const nextUrl = songsQueue.shift()
-            const isValidate = await PlayMusic(nextUrl, player)
-            if(isValidate !== true){
-                await interaction.channel.send(`**Link không tồn tại**\n> ${nextUrl}`)
-            }else{
-                const { video_details } = await playdl.video_basic_info(nextUrl)
-                const user_details = interaction.user
-                console.log("__PLAY", video_details.title, user_details.username);
+            const { video_details } = await playdl.video_basic_info(nextUrl)
+            const user_details = interaction.user
+            console.log("__PLAY", video_details.title, user_details.username);
 
-                const embed = musicEmbed("play", video_details, user_details)
-                if(embed === false){
-                    await interaction.channel.send("PLAY FAILED")
-                }else{
-                    await interaction.channel.send({
-                        embeds: [embed],
-                        components: [playingButton()]
-                    })
-                }
+            const isValidate = await PlayMusic(nextUrl, player)
+            
+            const embed = musicEmbed("play", video_details, user_details)
+            if(embed === false){
+                await interaction.channel.send("PLAY FAILED")
+            }else{
+                player.emit("endEmbed", player)
+                await interaction.channel.send({
+                    embeds: [embed],
+                    components: [playingButton()]
+                })
             }
         }else if(songsQueue.length < 1 && status === 'idle'){
             await interaction.channel.send("> **Không có nhạc trong hàng chờ!**")
@@ -48,20 +46,13 @@ export const createPlayer = (Music, interaction) => {
         }
     })
     player.addListener('skipPlaying', async (songsQueue, player, status, interaction) => {
-        if(songsQueue.length > 0){
-            if(status === 'playing'
-                || status === 'buffering'){
-                player.stop(true)
-            }
-        }
+        player.stop(true)
     })
     player.addListener('stopPlaying', async (songsQueue, player, status, interaction) => {
         if(songsQueue.length > 0){
             songsQueue.splice(0, songsQueue.length)
         }
-        if(status === 'playing'){
-            player.stop(true)
-        }
+        player.stop(true)
     })
     player.on(AudioPlayerStatus.Playing, () => {
         console.log('Playing...\tSongs queue: ', Music.songsQueue.length);

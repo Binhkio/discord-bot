@@ -3,6 +3,7 @@ discord.js: ^14.7.1
 */
 
 import {
+    AudioPlayerStatus,
     getVoiceConnection,
 } from '@discordjs/voice'
 import {
@@ -125,6 +126,14 @@ const handlePlay = async (interaction) => {
         Music.player = player
     }
 
+    console.log("/play ", url)
+    if(playdl.yt_validate(url) !== "video"){
+        if(playdl.yt_validate(url) === "playlist"){
+            return await interaction.reply("> Nếu muốn thêm playlist, hãy dùng \`/Saddlist\`")
+        }
+        return await interaction.reply("> **Link video không hợp lệ**")
+    }
+
     if(!now){
         Music.songsQueue.push(url)
         await interaction.deferReply()
@@ -146,15 +155,22 @@ const handleAddList = async (interaction) => {
     const url = interaction.options.getString('url')
     const now = interaction.options.getBoolean('now')
 
+    console.log("/addlist ", url);
     if(playdl.yt_validate(url) !== "playlist"){
-        interaction.reply(`**Link không tồn tại**`)
-        return;
+        if(playdl.yt_validate(url) === "video"){
+            return await interaction.reply("> Nếu muốn thêm nhạc, hãy dùng \`/play\`")
+        }
+        return await interaction.reply(`> **Link không tồn tại**`)
     }
 
     let voiceConnection = getVoiceConnection(interaction.guildId)
     if (!voiceConnection) {
         const channel = guildList.get(interaction.guildId).allGuildVoiceMembers.get(interaction.member.user.id)
         voiceConnection = await joinChannel(channel, interaction)
+        if(voiceConnection === false){
+            interaction.reply(">>> **Không tìm được thông tin kênh**\n_(Hãy dùng `/join` để gọi Ếch vào kênh)_")
+            return;
+        }
     }
 
     const listMusic = await getListMusic(url)
@@ -170,11 +186,16 @@ const handleAddList = async (interaction) => {
 
     if(!now){
         Music.songsQueue = Music.songsQueue.concat(listMusicUrl)
+        await interaction.deferReply()
+        
+        const video_details = await playdl.playlist_info(url)
+        const user_details = interaction.user
+        await interaction.editReply({ embeds: [musicEmbed("list", video_details, user_details)]})
+        
         if(Music.status === 'idle'
         && Music.songsQueue.length === listMusicUrl.length){
             Music.player.emit('keepPlaying', Music.songsQueue, Music.player, Music.status, interaction)
         }
-        await interaction.reply(`**Thêm danh sách nhạc**\n> ${url}`)
     }else{
         Music.songsQueue = listMusicUrl.concat(Music.songsQueue)
         Music.player.emit('skipPlaying', Music.songsQueue, Music.player, Music.status, interaction)
@@ -299,6 +320,32 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     }
 })
 
+client.on('messageCreate', (message) => {
+    if(message.editable === true
+        && message.author.bot === true
+        && message.author.id === process.env.CLIENT_ID
+        && message.content === ''
+        && message.components.length > 0)
+    {
+        if(message.components[0].components.length === 3){
+            const player = guildList.get(message.guildId).music?.player
+            if(player){
+                const title = message.embeds[0]?.title
+                const url = message.embeds[0]?.url
+                const avatarURL = message.embeds[0]?.author?.iconURL
+                if(title && url && avatarURL){
+                    player.prependOnceListener("endEmbed", async (player) => {
+                        await message.edit({
+                            embeds: [musicEmbed("end", {title: title, url: url}, {avatarURL: avatarURL})],
+                            components: []
+                        })
+                    })
+                }
+            }
+        }
+    }
+})
+
 client.on('interactionCreate', async interaction => {
     try {
         if(interaction.isButton()){
@@ -306,7 +353,7 @@ client.on('interactionCreate', async interaction => {
             if(!Music.player){
                 await interaction.reply("> **Không khả dụng**")
             }
-            buttonControll(interaction, Music)
+            await buttonControll(interaction, Music)
         }
 
         if (!interaction.isChatInputCommand()) return;

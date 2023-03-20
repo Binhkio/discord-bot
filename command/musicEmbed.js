@@ -20,7 +20,7 @@ export const musicEmbed = (action, videoDetails, userDetails) => {
                 .setImage(videoDetails.thumbnails[0].url)
                 .setURL(videoDetails.url)
                 // .setDescription(`👀 Lượt xem: ${videoDetails.views}`)
-                .addFields({ name: '💻 Nguồn', value: `\`${videoDetails.channel.name}\``, inline: true })
+                .addFields({ name: '🏷️ Nguồn', value: `\`${videoDetails.channel.name}\``, inline: true })
                 .addFields({ name: '📢 Người thêm', value: `\`${userDetails.username}\``, inline: true })
                 .addFields({ name: '🕖 Thời lượng', value: `\`${videoDetails.durationRaw}\``, inline: true })
                 .setTimestamp()
@@ -38,9 +38,41 @@ export const musicEmbed = (action, videoDetails, userDetails) => {
                 .setColor('Green')
                 .setURL(videoDetails.url)
                 // .setDescription(`👀 Lượt xem: ${videoDetails.views}`)
-                .addFields({ name: '💻 Nguồn', value: `\`${videoDetails.channel.name}\``, inline: true })
+                .addFields({ name: '🏷️ Nguồn', value: `\`${videoDetails.channel.name}\``, inline: true })
                 .addFields({ name: '📢 Người thêm', value: `\`${userDetails.username}\``, inline: true })
                 .addFields({ name: '🕖 Thời lượng', value: `\`${videoDetails.durationRaw}\``, inline: true })
+                .setTimestamp()
+                .setFooter({text: `_Developed by Binhkio_`})
+            return embed
+        }
+        case "list":{
+            console.log("Create ADDLIST embed");
+            const embed = new EmbedBuilder()
+                .setAuthor({
+                    name: "✅ THÊM DANH SÁCH NHẠC",
+                    iconURL: userDetails.avatarURL({extension:"png"})
+                })
+                .setTitle('💽 ' + videoDetails.title)
+                .setColor('Green')
+                .setURL(videoDetails.url)
+                // .setDescription(`👀 Lượt xem: ${videoDetails.views}`)
+                .addFields({ name: '🏷️ Nguồn', value: `\`${videoDetails.channel.name}\``, inline: true })
+                .addFields({ name: '📢 Người thêm', value: `\`${userDetails.username}\``, inline: true })
+                .addFields({ name: '🎟️ Số lượng', value: `\`${videoDetails.videoCount} bài\``, inline: true })
+                .setTimestamp()
+                .setFooter({text: `_Developed by Binhkio_`})
+            return embed
+        }
+        case "end":{
+            console.log("Create END embed");
+            const embed = new EmbedBuilder()
+                .setAuthor({
+                    name: "🔥 ĐÃ PHÁT 🔥",
+                    iconURL: userDetails.avatarURL
+                })
+                .setTitle(videoDetails.title)
+                .setURL(videoDetails.url)
+                .setColor('Blue')
                 .setTimestamp()
                 .setFooter({text: `_Developed by Binhkio_`})
             return embed
