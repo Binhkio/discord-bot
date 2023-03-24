@@ -8,6 +8,8 @@ export const joinChannel = async (voiceChannel, interaction) => {
         channelId: voiceChannel.id,
         guildId: interaction.guildId,
         adapterCreator: interaction.guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false,
     })
     await entersState(voiceConnection, VoiceConnectionStatus.Ready, 5e3)
     console.log(`Joined channel ${voiceChannel.id}, ${voiceChannel.name}`)

@@ -50,6 +50,14 @@ export const registerCommand = async () => {
                     )
                     .toJSON(),
                 new SlashCommandBuilder()
+                    .setName('search')
+                    .setDescription('Search video on Youtube by name')
+                    .addStringOption(option => 
+                        option.setName('name')
+                            .setDescription('Name of Youtube video')
+                            .setRequired(true)
+                    ),
+                new SlashCommandBuilder()
                     .setName('play')
                     .setDescription('Play music by Youtube URL')
                     .addStringOption(option => 
@@ -94,6 +102,10 @@ export const registerCommand = async () => {
                 new SlashCommandBuilder()
                     .setName('fuckoff')
                     .setDescription('Stop play those fuvking music')
+                    .toJSON(),
+                new SlashCommandBuilder()
+                    .setName('record')
+                    .setDescription('Recording your voice')
                     .toJSON(),
                 new SlashCommandBuilder()
                     .setName('disconnect')

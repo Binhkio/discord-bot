@@ -4,9 +4,11 @@ discord.js: ^14.7.1
 
 import {
     AudioPlayerStatus,
+    EndBehaviorType,
     getVoiceConnection,
 } from '@discordjs/voice'
 import {
+    AttachmentBuilder,
     Client,
     GatewayIntentBits
 } from 'discord.js'
@@ -17,8 +19,14 @@ import { textToSpeech } from './command/textToSpeech.js'
 import { createPlayer } from './command/player.js'
 import playdl from "play-dl"
 import { getListMusic } from './command/getListMusic.js'
-import { buttonControll } from './command/buttonControll.js'
+import { buttonControll, recordControll } from './command/buttonControll.js'
 import { musicEmbed } from './command/musicEmbed.js'
+import { createListeningStream } from './command/recordVoice.js'
+import ffmpeg from 'ffmpeg'
+import fs from "fs"
+import { recordButton } from './command/musicButton.js'
+import { choosedEmbed, searchEmbed } from './command/searchEmbed.js'
+import { searchSelector } from './command/searchSelector.js'
 
 keepAlive()
 
@@ -59,6 +67,9 @@ client.on("ready", () => {
                 status: 'idle',
                 songsQueue: [],
                 subscription: null,
+            },
+            record: {
+                isListening: false,
             }
         })
     })
@@ -105,8 +116,8 @@ const handleJoin = async (interaction) => {
     }
 }
 const handlePlay = async (interaction) => {
-    const url = interaction.options.getString('url')
-    const now = interaction.options.getBoolean('now')
+    const url = interaction?.options?.getString('url') || interaction?.values[0].split('|')[1]
+    const now = interaction?.options?.getBoolean('now')
 
     let voiceConnection = getVoiceConnection(interaction.guildId)
     if (!voiceConnection) {
@@ -136,7 +147,9 @@ const handlePlay = async (interaction) => {
 
     if(!now){
         Music.songsQueue.push(url)
-        await interaction.deferReply()
+        if(!interaction.replied){
+            await interaction.deferReply()
+        }
         
         if(Music.status === 'idle'
         && Music.songsQueue.length === 1){
@@ -201,6 +214,26 @@ const handleAddList = async (interaction) => {
         Music.player.emit('skipPlaying', Music.songsQueue, Music.player, Music.status, interaction)
     }
 }
+const handleSearch = async (interaction) => {
+    const name = interaction.options.getString('name')
+    
+    // Search
+    try {
+        const data = await playdl.search(name, {
+            limit: 10,
+            source: {
+                youtube: "video",
+            }
+        })
+
+        interaction.reply({
+            embeds: [searchEmbed(interaction, data)],
+            components: [searchSelector(data)],
+        })
+    } catch (error) {
+        console.log("Search error", error);
+    }
+}
 const handlePause = async (interaction) => {
     const Music = guildList.get(interaction.guildId).music
     if(!Music.player){
@@ -255,6 +288,47 @@ const handleDisconnect = async (interaction, channel) => {
         voiceConnection?.destroy()
         await channel.send(`> **Ếch xanh đã thoát.**`)
     }
+}
+const handleRecord = async (interaction) => {
+    // let voiceConnection = getVoiceConnection(interaction.guildId)
+    // if (!voiceConnection) {
+    //     const channel = guildList.get(interaction.guildId).allGuildVoiceMembers.get(interaction.user.id)
+    //     voiceConnection = await joinChannel(channel, interaction)
+    //     if(voiceConnection === false){
+    //         interaction.reply(">>> **Không tìm được thông tin kênh**\n_(Hãy dùng `/join` để gọi Ếch vào kênh)_")
+    //         return;
+    //     }
+    // }
+    
+    // const receiver = voiceConnection.receiver
+    // receiver.speaking.on('start', (userId) => {
+    //     const receiverSubcription = receiver.subscribe(userId, {
+    //         end: {
+    //             behavior: EndBehaviorType.AfterSilence,
+    //         }
+    //     })
+    //     receiverSubcription.on('data', (data) => {
+    //         console.log("Receiver data", data);
+    //     })
+    //     receiverSubcription.once('end', () => {
+    //         console.log("End receiver...");
+    //     })
+    //     receiverSubcription.on('error', (err) => {
+    //         console.log("Receiver error", err);
+    //     })
+    // })
+
+    // const isListening = guildList.get(interaction.guildId).record.isListening
+    // if(isListening === true){
+    //     recordControll("stop_record", voiceConnection, interaction)
+    // }else{
+    //     recordControll("start_record", voiceConnection, interaction)
+    // }
+
+    await interaction.reply({
+        embeds: [musicEmbed("record", {title: "RECORDING YOUR VOICE"}, {avatarURL: interaction.user.avatarURL()})],
+        components: [recordButton("init")]
+    })
 }
 
 
@@ -320,7 +394,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     }
 })
 
-client.on('messageCreate', (message) => {
+client.on('messageCreate', async (message) => {
     if(message.editable === true
         && message.author.bot === true
         && message.author.id === process.env.CLIENT_ID
@@ -350,10 +424,25 @@ client.on('interactionCreate', async interaction => {
     try {
         if(interaction.isButton()){
             const Music = guildList.get(interaction.guildId).music
-            if(!Music.player){
-                await interaction.reply("> **Không khả dụng**")
+            if(interaction.customId.includes("_record")){
+                return await recordControll(interaction.customId, interaction)
             }
+            
             await buttonControll(interaction, Music)
+        }
+        
+        if(interaction.isStringSelectMenu()){
+            if(interaction.customId === "search-choice"){
+                const data = interaction.values[0].split('|')
+                interaction.update({
+                    embeds: [choosedEmbed(interaction, {
+                        title: data[0],
+                        url: data[1]
+                    })],
+                    components: [],
+                })
+                return await handlePlay(interaction)
+            }
         }
 
         if (!interaction.isChatInputCommand()) return;
@@ -383,6 +472,12 @@ client.on('interactionCreate', async interaction => {
             await handleAddList(interaction)
         }
 
+        // SEARCH
+        if (interaction.commandName === 'search') {
+            await handleSearch(interaction)
+        }
+
+
         // PAUSE
         if (interaction.commandName === 'pause') {
             await handlePause(interaction)
@@ -401,6 +496,11 @@ client.on('interactionCreate', async interaction => {
         // STOP
         if (interaction.commandName === 'stop') {
             await handleStop(interaction)
+        }
+
+        // RECORD
+        if (interaction.commandName === 'record') {
+            await handleRecord(interaction)
         }
 
         // DISCONNECT

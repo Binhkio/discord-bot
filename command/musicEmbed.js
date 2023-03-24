@@ -77,6 +77,19 @@ export const musicEmbed = (action, videoDetails, userDetails) => {
                 .setFooter({text: `_Developed by Binhkio_`})
             return embed
         }
+        case "record":{
+            console.log("Create RECORD embed");
+            const embed = new EmbedBuilder()
+                .setAuthor({
+                    name: "RECORDING",
+                    iconURL: userDetails.avatarURL
+                })
+                .setColor('Yellow')
+                .setTitle(videoDetails.title)
+                .setTimestamp()
+                .setFooter({text: `_Developed by Binhkio_`})
+            return embed
+        }
         default:
             return false
     }

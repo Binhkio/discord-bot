@@ -1,7 +1,10 @@
-import { pauseButton, playingButton, stopButton } from "./musicButton.js";
+import { pauseButton, playingButton, recordButton, stopButton } from "./musicButton.js";
 
 export const buttonControll = async (interaction, Music) => {
     console.log("Clicked button:", interaction.customId);
+    if(!Music.player){
+        return await interaction.reply("> **Không khả dụng**")
+    }
     switch (interaction.customId) {
         case "pause":{
             if(Music.status === 'playing'
@@ -22,6 +25,29 @@ export const buttonControll = async (interaction, Music) => {
         case "stop":{
             await interaction.update({components: [stopButton()]})
             Music.player.emit("stopPlaying", Music.songsQueue, Music.player, Music.status, interaction)
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+export const recordControll = async (action, interaction) => {
+    switch (action) {
+        case "start_record":{
+            await interaction.update({components: [recordButton("recording")]})
+            break;
+        }
+        case "pause_record":{
+            await interaction.update({components: [recordButton("pausing")]})
+            break;
+        }
+        case "resume_record":{
+            await interaction.update({components: [recordButton("recording")]})
+            break;
+        }
+        case "stop_record":{
+            await interaction.update({components: []})
             break;
         }
         default:
