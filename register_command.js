@@ -108,6 +108,23 @@ export const registerCommand = async () => {
                     .setDescription('Recording your voice')
                     .toJSON(),
                 new SlashCommandBuilder()
+                    .setName('csgo')
+                    .setDescription('View CSGO profile')
+                    .addStringOption(option =>
+                        option.setName('steamid')
+                            .setDescription('Type your steam ID')
+                            .setRequired(true)
+                    )
+                    .addStringOption(option =>
+                        option.setName('option')
+                            .setDescription('Your option')
+                            .addChoices({
+                                name: 'cases price',
+                                value: 'cases-price',
+                            })
+                    )
+                    .toJSON(),
+                new SlashCommandBuilder()
                     .setName('disconnect')
                     .setDescription('Disconnect from current channel')
                     .toJSON(),

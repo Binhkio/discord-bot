@@ -27,6 +27,8 @@ import fs from "fs"
 import { recordButton } from './command/musicButton.js'
 import { choosedEmbed, searchEmbed } from './command/searchEmbed.js'
 import { searchSelector } from './command/searchSelector.js'
+import { casesPrice } from './command/csgo/casesPrice.js'
+import { csgoEmbed } from './command/csgo/csgoEmbed.js'
 
 keepAlive()
 
@@ -140,7 +142,7 @@ const handlePlay = async (interaction) => {
     console.log("/play ", url)
     if(playdl.yt_validate(url) !== "video"){
         if(playdl.yt_validate(url) === "playlist"){
-            return await interaction.reply("> Nếu muốn thêm playlist, hãy dùng \`/Saddlist\`")
+            return await interaction.reply("> Nếu muốn thêm playlist, hãy dùng \`/addlist\`")
         }
         return await interaction.reply("> **Link video không hợp lệ**")
     }
@@ -330,6 +332,17 @@ const handleRecord = async (interaction) => {
         components: [recordButton("init")]
     })
 }
+const handleCsgoCases = async (interaction) => {
+    await interaction.deferReply()
+    const steamId = interaction.options.getString('steamid')
+    const casesPrices = await casesPrice(steamId)
+    await interaction.editReply({
+        embeds: [csgoEmbed('price', casesPrices, {
+            user: interaction.user,
+            steamId: steamId,
+        })]
+    })
+}
 
 
 client.on("voiceStateUpdate", async (oldState, newState) => {
@@ -427,7 +440,6 @@ client.on('interactionCreate', async interaction => {
             if(interaction.customId.includes("_record")){
                 return await recordControll(interaction.customId, interaction)
             }
-            
             await buttonControll(interaction, Music)
         }
         
@@ -501,6 +513,19 @@ client.on('interactionCreate', async interaction => {
         // RECORD
         if (interaction.commandName === 'record') {
             await handleRecord(interaction)
+        }
+
+        // HTML SAMPLE
+        if (interaction.commandName === 'csgo') {
+            const option = interaction.options.getString('option')
+            switch(option){
+                case 'cases-price':{
+                    await handleCsgoCases(interaction)
+                    break
+                }
+                default:
+                    break
+            }
         }
 
         // DISCONNECT

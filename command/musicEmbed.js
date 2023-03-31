@@ -3,9 +3,11 @@ import { EmbedBuilder } from "discord.js";
 
 export const musicEmbed = (action, videoDetails, userDetails) => {
     // Video details
-    videoDetails.title = videoDetails.title.length > 255
-        ? videoDetails.title.slice(0, 250).concat("...")
-        : videoDetails.title
+    if(videoDetails?.title){
+        videoDetails.title = videoDetails.title.length > 255
+            ? videoDetails.title.slice(0, 250).concat("...")
+            : videoDetails.title
+    }
     
     switch(action){
         case "play":{
